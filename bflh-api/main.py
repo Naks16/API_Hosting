@@ -76,3 +76,4 @@ async def bfhl(body: InputData):
 
     return JSONResponse(status_code=200, content=response)
 
+
