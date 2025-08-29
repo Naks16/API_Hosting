@@ -1,92 +1,64 @@
-# main.py
 import os
 import re
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from typing import List, Any
+from pydantic import BaseModel
+from typing import List, Union
 
 app = FastAPI()
+
+# Define the request body model
+class InputData(BaseModel):
+    data: List[Union[str, int]]
+
+# Helper: build user_id from FULL_NAME and DOB environment variables
 def build_user_id():
-    full_name = os.getenv("FULL_NAME", "nakshatra_nambiar").strip().lower()
-    dob = os.getenv("DOB", "16092004").strip()
-    full_name = re.sub(r"\s+", "_", full_name)
+    full_name = os.getenv("FULL_NAME", "nakhsatra nambiar").strip().lower()
+    dob = os.getenv("DOB", "16092004").strip()   # ddmmyyyy
+    full_name = re.sub(r"\s+", "_", full_name)   # replace spaces with _
     return f"{full_name}_{dob}"
+
+# Utility regex for integers
 _int_re = re.compile(r"^-?\d+$")
 
 @app.post("/bfhl")
-async def bfhl(request: Request):
+async def bfhl(body: InputData):
     user_id = build_user_id()
     email = os.getenv("EMAIL", "nikkinambiar16@gmail.com")
     roll_number = os.getenv("ROLL_NUMBER", "22BCE0401")
 
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={
-            "is_success": False,
-            "user_id": user_id,
-            "email": email,
-            "roll_number": roll_number,
-            "message": "Invalid JSON"
-        })
+    data = body.data
 
-    data = body.get("data")
-    if not isinstance(data, list):
-        return JSONResponse(status_code=400, content={
-            "is_success": False,
-            "user_id": user_id,
-            "email": email,
-            "roll_number": roll_number,
-            "message": "'data' field missing or not an array"
-        })
-
-    numbers_as_strings: List[str] = []
-    alphabets_upper: List[str] = []
-    special_chars: List[str] = []
-    alpha_chars_in_order: List[str] = []  
+    numbers_as_strings = []
+    alphabets_upper = []
+    special_chars = []
+    alpha_chars_in_order = []
 
     for item in data:
-        if isinstance(item, int):
-            s = str(item)
+        s = str(item).strip()
+        # integer string?
+        if _int_re.fullmatch(s):
             numbers_as_strings.append(s)
-        elif isinstance(item, float):
-            if item.is_integer():
-                s = str(int(item))
-                numbers_as_strings.append(s)
-            else:
-                special_chars.append(str(item))
+        elif s.isalpha():
+            alphabets_upper.append(s.upper())
+            alpha_chars_in_order.extend(list(s))
         else:
-            s = str(item).strip()
-            if _int_re.fullmatch(s):
-                numbers_as_strings.append(s)
-            elif s.isalpha():
-                alphabets_upper.append(s.upper())
-                alpha_chars_in_order.extend(list(s))
-            else:
-                special_chars.append(s)
+            special_chars.append(s)
 
-
-    even_numbers: List[str] = []
-    odd_numbers: List[str] = []
+    even_numbers, odd_numbers = [], []
     total = 0
     for ns in numbers_as_strings:
-        try:
-            n = int(ns)
-        except ValueError:
-            continue
+        n = int(ns)
         total += n
         if n % 2 == 0:
             even_numbers.append(ns)
         else:
             odd_numbers.append(ns)
 
-
-    concat_list: List[str] = []
+    # Build concat_string
+    concat_list = []
     for i, ch in enumerate(reversed(alpha_chars_in_order)):
-        if i % 2 == 0:
-            concat_list.append(ch.upper())
-        else:
-            concat_list.append(ch.lower())
+        concat_list.append(ch.upper() if i % 2 == 0 else ch.lower())
     concat_string = "".join(concat_list)
 
     response = {
@@ -98,8 +70,9 @@ async def bfhl(request: Request):
         "even_numbers": even_numbers,
         "alphabets": alphabets_upper,
         "special_characters": special_chars,
-        "sum": str(total),           
-        "concat_string": concat_string
+        "sum": str(total),
+        "concat_string": concat_string,
     }
 
     return JSONResponse(status_code=200, content=response)
+
